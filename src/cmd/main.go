@@ -21,6 +21,7 @@ import (
 	"github.com/PatriceAndoniaina/isolation-manager/src/internal/log"
 	"github.com/PatriceAndoniaina/isolation-manager/src/pkg/cgroups"
 	"github.com/PatriceAndoniaina/isolation-manager/src/pkg/container"
+	"github.com/PatriceAndoniaina/isolation-manager/src/pkg/deploy"
 	apperrors "github.com/PatriceAndoniaina/isolation-manager/src/pkg/errors"
 	"github.com/PatriceAndoniaina/isolation-manager/src/pkg/logs"
 	"github.com/PatriceAndoniaina/isolation-manager/src/pkg/nginx"
@@ -74,6 +75,8 @@ func newRootCmd() *cobra.Command {
 		newLogsCmd(mgr),
 		newStatsCmd(mgr),
 		newNginxCmd(mgr),
+		newDeployCmd(),
+		newRemoteCmd(),
 	)
 	return root
 }
@@ -341,6 +344,69 @@ func writeStats(w io.Writer, c *container.Container, s cgroups.Stats, cpu float6
 		humanBytes(s.MemoryCurrentBytes), humanBytes(memMax),
 		s.PidsCurrent, pidsMax)
 	tw.Flush()
+}
+
+// newDeployCmd : déploiement de l'outil sur un serveur Linux distant.
+func newDeployCmd() *cobra.Command {
+	var (
+		host, user, key, remotePath, source string
+		port                                int
+		installDeps                         bool
+	)
+	cmd := &cobra.Command{
+		Use:   "deploy",
+		Short: "Déployer l'outil sur un serveur Linux distant (SSH + rsync)",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return deploy.New().Deploy(cmd.Context(), cmd.OutOrStdout(), deploy.Options{
+				Target:      deploy.Target{Host: host, User: user, Port: port, Key: key},
+				RemotePath:  remotePath,
+				Source:      source,
+				InstallDeps: installDeps,
+			})
+		},
+	}
+	f := cmd.Flags()
+	f.StringVar(&host, "host", "", "hôte du serveur (requis)")
+	f.StringVarP(&user, "user", "u", "root", "utilisateur SSH")
+	f.IntVarP(&port, "port", "p", 0, "port SSH (défaut 22)")
+	f.StringVarP(&key, "key", "i", "", "clé privée SSH")
+	f.StringVar(&remotePath, "remote-path", config.RemoteBinPath, "chemin d'installation distant")
+	f.StringVar(&source, "source", ".", "racine du module à compiler")
+	f.BoolVar(&installDeps, "install-deps", true, "installer systemd-container si absent")
+	_ = cmd.MarkFlagRequired("host")
+	return cmd
+}
+
+// newRemoteCmd : exécution d'une sous-commande sur le serveur distant via SSH.
+// Les flags doivent précéder la sous-commande : `remote --host srv create user01`.
+func newRemoteCmd() *cobra.Command {
+	var (
+		host, user, key, remotePath string
+		port                        int
+	)
+	cmd := &cobra.Command{
+		Use:   "remote --host <srv> <command> [args...]",
+		Short: "Exécuter une commande de l'outil sur le serveur distant",
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return deploy.New().Exec(cmd.Context(),
+				deploy.Target{Host: host, User: user, Port: port, Key: key},
+				remotePath, args,
+				deploy.Streams{In: cmd.InOrStdin(), Out: cmd.OutOrStdout(), Err: cmd.ErrOrStderr()})
+		},
+	}
+	f := cmd.Flags()
+	// Tout ce qui suit le premier argument positionnel est transmis au serveur
+	// (et non interprété comme flag local).
+	f.SetInterspersed(false)
+	f.StringVar(&host, "host", "", "hôte du serveur (requis)")
+	f.StringVarP(&user, "user", "u", "root", "utilisateur SSH")
+	f.IntVarP(&port, "port", "p", 0, "port SSH (défaut 22)")
+	f.StringVarP(&key, "key", "i", "", "clé privée SSH")
+	f.StringVar(&remotePath, "remote-path", config.RemoteBinPath, "chemin du binaire distant")
+	_ = cmd.MarkFlagRequired("host")
+	return cmd
 }
 
 // humanBytes formate un nombre d'octets en unités binaires lisibles (KiB, MiB…).

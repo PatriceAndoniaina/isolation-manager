@@ -36,6 +36,9 @@ const (
 	RunDir = "/run/" + AppName
 	// LogDir contient les journaux applicatifs (audit trail).
 	LogDir = "/var/log/" + AppName
+	// RemoteBinPath est le chemin d'installation par défaut du binaire sur un
+	// serveur distant (voir pkg/deploy).
+	RemoteBinPath = "/usr/local/bin/" + AppName
 )
 
 // Timeouts appliqués aux opérations système.
