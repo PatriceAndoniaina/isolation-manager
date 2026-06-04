@@ -45,6 +45,24 @@ func TestRenderProducesCompliantConfig(t *testing.T) {
 	if err := Validate(dirs); err != nil {
 		t.Fatalf("rendered config not compliant: %v", err)
 	}
+
+	// Tout doit être encapsulé dans un unique bloc http (contexte requis pour
+	// limit_req_zone) contenant la zone et les deux server blocks.
+	if len(dirs) != 1 || dirs[0].Name != "http" {
+		t.Fatalf("top-level = %+v, want single http block", dirs)
+	}
+	var zones, servers int
+	for _, d := range dirs[0].Block {
+		switch d.Name {
+		case "limit_req_zone":
+			zones++
+		case "server":
+			servers++
+		}
+	}
+	if zones != 1 || servers != 2 {
+		t.Errorf("http block has %d zone(s) and %d server(s), want 1 and 2", zones, servers)
+	}
 }
 
 func TestRenderRejectsInvalid(t *testing.T) {

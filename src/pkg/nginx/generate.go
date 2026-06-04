@@ -25,39 +25,43 @@ type SiteOptions struct {
 	TLSKeyPath  string // chemin de la clé privée TLS
 }
 
-// siteTemplate produit deux server blocks : redirection 80→443 et le proxy TLS
-// durci (rate limiting, limite de taille, en-têtes de proxy).
+// siteTemplate produit un bloc http complet : la zone de rate limiting (qui ne
+// peut vivre que dans le contexte http) puis deux server blocks — redirection
+// 80→443 et le proxy TLS durci (limite de taille, en-têtes de proxy).
 const siteTemplate = `# Reverse proxy généré pour le conteneur {{.Name}}
 # rules/security.md → Nginx Validation : TLS imposé, rate limit, pas d'upstream hôte.
-limit_req_zone $binary_remote_addr zone={{.Zone}}:10m rate={{.Rate}};
+http {
+    # La zone de rate limiting doit être déclarée dans le contexte http.
+    limit_req_zone $binary_remote_addr zone={{.Zone}}:10m rate={{.Rate}};
 
-server {
-    listen 80;
-    server_name {{.ServerName}};
-    # Redirection systématique vers HTTPS (TLS imposé).
-    return 301 https://$host$request_uri;
-}
+    server {
+        listen 80;
+        server_name {{.ServerName}};
+        # Redirection systématique vers HTTPS (TLS imposé).
+        return 301 https://$host$request_uri;
+    }
 
-server {
-    listen 443 ssl;
-    server_name {{.ServerName}};
+    server {
+        listen 443 ssl;
+        server_name {{.ServerName}};
 
-    ssl_certificate {{.TLSCertPath}};
-    ssl_certificate_key {{.TLSKeyPath}};
-    ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_certificate {{.TLSCertPath}};
+        ssl_certificate_key {{.TLSKeyPath}};
+        ssl_protocols TLSv1.2 TLSv1.3;
 
-    # Limite de taille des requêtes.
-    client_max_body_size {{.MaxBodySize}};
+        # Limite de taille des requêtes.
+        client_max_body_size {{.MaxBodySize}};
 
-    location / {
-        # Rate limiting sur le proxy.
-        limit_req zone={{.Zone}} burst={{.Burst}} nodelay;
+        location / {
+            # Rate limiting sur le proxy.
+            limit_req zone={{.Zone}} burst={{.Burst}} nodelay;
 
-        proxy_pass http://{{.Upstream}};
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_pass http://{{.Upstream}};
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
     }
 }
 `
