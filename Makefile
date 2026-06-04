@@ -2,6 +2,8 @@
 
 BIN := bin/isolation-manager
 PKG := ./src/...
+# Couverture mesurée sur les packages métier (règle d'archi : >80% sur pkg/).
+COVERPKG := ./src/pkg/...
 
 help:
 	@echo "Available targets:"
@@ -24,8 +26,12 @@ test:
 race:
 	go test -race $(PKG)
 
+# -coverpkg attribue correctement la couverture inter-packages et fusionne le
+# profil : sans lui, le mode multi-packages de `go test -cover` sous-estime
+# certains packages (artefact de calcul). Le total est lu via `cover -func`.
 coverage:
-	go test -coverprofile=coverage.out $(PKG)
+	go test -coverpkg=$(COVERPKG) -coverprofile=coverage.out $(COVERPKG)
+	@go tool cover -func=coverage.out | tail -1
 	go tool cover -html=coverage.out
 
 lint:
