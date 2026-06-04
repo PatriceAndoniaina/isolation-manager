@@ -1,0 +1,7 @@
+# Build artifacts
+/bin/
+coverage.out
+coverage.html
+
+# OS junk
+.DS_Store

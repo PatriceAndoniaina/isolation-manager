@@ -1,0 +1,42 @@
+name: filesystem-access
+type: mcp
+enabled: true
+
+# Permettre à Claude de lire/écrire le filesystem du projet:
+# templates rootfs, configs, fichiers nginx.
+
+capabilities:
+  read:
+    - path: src/**/*
+    - path: config/**/*
+    - path: templates/**/*
+    - path: tests/**/*
+    - path: .claude/**/*
+
+  write:
+    - path: src/**/*
+      exclude: [node_modules, vendor]
+    - path: config/**/*
+    - path: tests/**/*
+    - path: .claude/**/*
+
+  forbidden:
+    - path: /etc/*
+    - path: /root/*
+    - path: /sys/*
+    - path: /proc/*
+    - path: /**/.git/objects/*
+
+operations:
+  allowed:
+    - read_file
+    - write_file
+    - list_directory
+    - create_directory
+    - delete_file        # avec confirmation
+  timeout: 5s
+
+# Contraintes de sécurité
+# ✅ CAN: lire/écrire dans le projet, créer templates rootfs
+# ❌ CANNOT: modifier /etc/systemd (utiliser shell-execution),
+#            accéder /root, modifier binaires système

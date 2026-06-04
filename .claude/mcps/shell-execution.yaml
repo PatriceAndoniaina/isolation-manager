@@ -1,0 +1,101 @@
+name: shell-execution
+type: mcp
+enabled: true
+
+execution_model: "restricted"  # Seules les commandes approuvées
+
+allowed_commands:
+  # Gestion des containers
+  - pattern: "systemd-nspawn"
+    args:
+      allowed_flags:
+        - "--machine="
+        - "--directory="
+        - "--read-only"
+        - "--tmpfs="
+        - "--bind="
+        - "--bind-ro="
+        - "--memory-limit="
+        - "--cpuset-cpus="
+        - "--boot"
+      forbidden_flags:
+        - "--privileged"        # SECURITY: jamais autorisé
+        - "--cap-add"           # SECURITY: aucune capability
+        - "--selinux-relabel"
+
+  # Gestion des services
+  - pattern: "systemctl"
+    args:
+      allowed_operations:
+        - "start"
+        - "stop"
+        - "restart"
+        - "status"
+      forbidden_operations:
+        - "set-environment"
+        - "import-environment"
+      allowed_units:
+        - "nspawn@*.service"    # uniquement nos containers
+
+  # Consultation des logs
+  - pattern: "journalctl"
+    args:
+      allowed_flags:
+        - "--machine="
+        - "--follow"
+        - "--lines="
+        - "--since="
+        - "--until="
+        - "--grep="
+      forbidden_flags: []
+
+  # Filesystem
+  - pattern: "mount"
+    args:
+      allowed_flags:
+        - "--bind"
+        - "--read-only"
+      requires_target_validation: true
+
+  - pattern: "umount"
+
+  # Opérations fichiers
+  - pattern: "mkdir"
+  - pattern: "rm"
+    args:
+      requires_confirmation: true   # demander à l'utilisateur
+
+  # Utilitaires
+  - pattern: "ps"
+  - pattern: "lsof"
+  - pattern: "stat"
+
+timeout:
+  default: 30s
+  systemd-nspawn: 60s
+  journalctl: 10s
+
+sandboxing:
+  user: "isolation-manager"   # utilisateur dédié
+  cgroups:
+    memory: 512M
+    cpu_quota: 100000
+  capabilities:
+    - CAP_SYS_ADMIN           # pour nspawn
+    - CAP_NET_ADMIN           # pour le namespace réseau
+    - CAP_CHOWN               # pour le setup rootfs
+  readonly_paths:
+    - /etc/passwd
+    - /etc/shadow
+    - /proc
+    - /sys/kernel/security
+
+error_handling:
+  on_timeout: "kill_and_report"
+  on_permission_denied: "log_and_fail"
+  on_not_allowed: "reject_immediately"
+
+logging:
+  all_commands: true
+  audit_trail: true
+  log_output: true

@@ -1,0 +1,38 @@
+name: web-server
+type: mcp
+enabled: false   # Optionnel - activer avec --enable-dashboard
+
+# Dashboard web pour visualiser les containers en temps réel,
+# les ressources utilisées, les logs, et contrôler les containers.
+
+port: 8080
+host: localhost   # restreint au local uniquement
+tls: true         # HTTPS requis
+
+endpoints:
+  /api/containers:
+    GET:  "list all containers"
+    POST: "create container"
+  /api/containers/{name}:
+    GET:    "get container info"
+    DELETE: "delete container"
+  /api/containers/{name}/logs:
+    GET: "stream logs"
+  /api/containers/{name}/stats:
+    GET: "resource usage"
+
+authentication:
+  type: "bearer_token"
+  token_env: "ISOLATION_API_TOKEN"
+
+rate_limiting:
+  requests_per_second: 100
+  burst: 10
+
+cors:
+  allowed_origins: ["http://localhost:3000"]
+  allowed_methods: ["GET", "POST", "DELETE"]
+
+# Démarrage:
+#   claude code run --enable-dashboard
+#   Dashboard disponible sur: https://localhost:8080
