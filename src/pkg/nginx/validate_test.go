@@ -72,6 +72,20 @@ func TestValidateViolations(t *testing.T) {
 				server { listen 443 ssl; ssl_certificate /x; client_max_body_size 10m;
 				location / { limit_req zone=z; proxy_pass http://localhost:8080; } }`,
 		},
+		{
+			name: "obsolete TLS protocol",
+			cfg: `limit_req_zone x zone=z:10m rate=1r/s;
+				server { listen 443 ssl; ssl_certificate /x; ssl_protocols TLSv1.1 TLSv1.2;
+				client_max_body_size 10m;
+				location / { limit_req zone=z; proxy_pass http://10.0.0.2:80; } }`,
+		},
+		{
+			name: "server_tokens on",
+			cfg: `limit_req_zone x zone=z:10m rate=1r/s;
+				server { listen 443 ssl; ssl_certificate /x; server_tokens on;
+				client_max_body_size 10m;
+				location / { limit_req zone=z; proxy_pass http://10.0.0.2:80; } }`,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -10,6 +10,7 @@ package nginx
 
 import (
 	"fmt"
+	"strings"
 )
 
 // Directive représente une directive nginx, éventuellement suivie d'un bloc.
@@ -18,6 +19,7 @@ type Directive struct {
 	Name  string
 	Args  []string
 	Block []*Directive
+	Line  int // ligne (1-indexée) où débute la directive, pour les diagnostics
 }
 
 // tokenKind énumère les lexèmes reconnus.
@@ -145,7 +147,7 @@ func (p *parser) parseDirective() (*Directive, error) {
 	if first.kind != tokWord {
 		return nil, fmt.Errorf("ligne %d: nom de directive attendu, trouvé %q", first.line, first.val)
 	}
-	d := &Directive{Name: first.val}
+	d := &Directive{Name: first.val, Line: first.line}
 	p.pos++
 
 	for p.pos < len(p.toks) {
@@ -180,4 +182,66 @@ func Walk(dirs []*Directive, fn func(*Directive)) {
 			Walk(d.Block, fn)
 		}
 	}
+}
+
+// Value renvoie les arguments de la directive joints par une espace
+// (ex: "443 ssl" pour `listen 443 ssl;`). Pratique pour lire une valeur simple.
+func (d *Directive) Value() string {
+	if d == nil {
+		return ""
+	}
+	return strings.Join(d.Args, " ")
+}
+
+// Get renvoie la première directive enfant directe nommée name, ou nil.
+// Sûr sur un récepteur nil, ce qui permet le chaînage : d.Get("x").Get("y").
+func (d *Directive) Get(name string) *Directive {
+	if d == nil {
+		return nil
+	}
+	for _, c := range d.Block {
+		if c.Name == name {
+			return c
+		}
+	}
+	return nil
+}
+
+// Find renvoie les directives enfants directes de dirs nommées name.
+func Find(dirs []*Directive, name string) []*Directive {
+	var out []*Directive
+	for _, d := range dirs {
+		if d.Name == name {
+			out = append(out, d)
+		}
+	}
+	return out
+}
+
+// FindAll renvoie toutes les directives nommées name dans l'arbre (récursif).
+func FindAll(dirs []*Directive, name string) []*Directive {
+	var out []*Directive
+	Walk(dirs, func(d *Directive) {
+		if d.Name == name {
+			out = append(out, d)
+		}
+	})
+	return out
+}
+
+// Select suit un chemin de noms de directives imbriquées (ex: "http", "server",
+// "listen") et renvoie toutes les directives atteignant la dernière étape.
+func Select(dirs []*Directive, path ...string) []*Directive {
+	if len(path) == 0 {
+		return nil
+	}
+	cur := dirs
+	for _, name := range path[:len(path)-1] {
+		var next []*Directive
+		for _, d := range Find(cur, name) {
+			next = append(next, d.Block...)
+		}
+		cur = next
+	}
+	return Find(cur, path[len(path)-1])
 }
