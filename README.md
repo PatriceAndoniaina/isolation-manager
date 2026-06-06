@@ -35,10 +35,47 @@ go build -o bin/isolation-manager ./src/cmd
 | `logs <name>` | Journaux journald (`--follow`, `--lines`, `--since`) |
 | `stats <name>` | Métriques cgroup v2 (`--watch`, `--interval`) |
 | `nginx <name>` | Générer la config reverse proxy durcie |
+| `nginx fmt <fichier>` | Reformater un fichier nginx (`-w` pour écrire sur place) |
 | `deploy` | Déployer l'outil sur un serveur Linux distant |
 | `remote` | Exécuter une commande sur le serveur distant |
 
-Flags globaux : `-v/--verbose`, `--json`, `--version`.
+Flags globaux : `-v/--verbose`, `--json`, `--version`, `--auto-install`.
+
+---
+
+## Preflight : vérification automatique des dépendances
+
+Avant d'exécuter une commande, l'outil vérifie (`exec.LookPath`) que les
+binaires externes qu'elle utilise réellement sont présents sur l'hôte **où il
+s'exécute**. S'ils manquent, il les **installe automatiquement** via le
+gestionnaire de paquets de la distribution.
+
+| Commande | Binaires vérifiés |
+|---|---|
+| `start` | `systemd-run`, `systemd-nspawn` |
+| `stop` | `machinectl` |
+| `ssh` | `ssh`, `ssh-keygen` |
+| `logs` | `journalctl` |
+| `deploy` | `ssh`, `rsync`, `go` |
+| `remote` | `ssh` |
+
+- Détecte **apt / dnf / pacman** et installe le bon paquet
+  (`systemd-nspawn` → `systemd-container`, `ssh` → `openssh-client`…).
+- `--auto-install=false` : se contente de **signaler** les manquants sans rien
+  installer (échec explicite).
+- Le preflight s'exécute **là où tourne le binaire** : ainsi
+  `remote --host srv start user01` vérifie et installe les dépendances
+  **sur le serveur**, pas en local.
+
+```bash
+# sur un serveur fraîchement provisionné, start installe systemd-container au besoin
+isolation-manager start user01
+→ dépendances manquantes (apt) : systemd-nspawn — installation de systemd-container…
+```
+
+> ⚠️ L'auto-install passe par `sudo` en mode non-interactif : **sudo sans mot de
+> passe** est requis. Sinon, utilise `deploy --install-deps` ou installe
+> `systemd-container` à la main.
 
 ---
 
