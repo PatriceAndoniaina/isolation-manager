@@ -31,6 +31,9 @@ var (
 	ErrNotImplemented = errors.New("not implemented")
 	// ErrSecurityViolation signale une opération interdite par les security gates.
 	ErrSecurityViolation = errors.New("security policy violation")
+	// ErrDependencyMissing signale qu'un binaire externe requis est absent et
+	// n'a pas pu être installé automatiquement (voir pkg/preflight).
+	ErrDependencyMissing = errors.New("required command is missing")
 )
 
 // ContainerError enveloppe une erreur en l'associant à un conteneur et une

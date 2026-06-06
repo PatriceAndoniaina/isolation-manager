@@ -26,8 +26,30 @@ import (
 	"github.com/PatriceAndoniaina/isolation-manager/src/pkg/logs"
 	"github.com/PatriceAndoniaina/isolation-manager/src/pkg/nginx"
 	"github.com/PatriceAndoniaina/isolation-manager/src/pkg/nspawn"
+	"github.com/PatriceAndoniaina/isolation-manager/src/pkg/preflight"
 	"github.com/PatriceAndoniaina/isolation-manager/src/pkg/ssh"
 )
+
+// opDeps liste les binaires externes que chaque commande exécute réellement.
+// Le preflight les vérifie (et les installe si --auto-install) avant l'action.
+var opDeps = map[string][]string{
+	"start":  {"systemd-run", "systemd-nspawn"},
+	"stop":   {"machinectl"},
+	"ssh":    {"ssh", "ssh-keygen"},
+	"logs":   {"journalctl"},
+	"deploy": {"ssh", "rsync", "go"},
+	"remote": {"ssh"},
+}
+
+// ensureDeps lance le preflight pour l'opération op (no-op si rien à vérifier).
+func ensureDeps(cmd *cobra.Command, op string) error {
+	deps := opDeps[op]
+	if len(deps) == 0 {
+		return nil
+	}
+	auto, _ := cmd.Flags().GetBool("auto-install")
+	return preflight.New().Ensure(cmd.Context(), cmd.ErrOrStderr(), deps, auto)
+}
 
 func main() {
 	if err := newRootCmd().Execute(); err != nil {
@@ -64,6 +86,8 @@ func newRootCmd() *cobra.Command {
 
 	root.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "logs détaillés (debug)")
 	root.PersistentFlags().BoolVar(&jsonLogs, "json", false, "logs au format JSON")
+	root.PersistentFlags().Bool("auto-install", true,
+		"installer automatiquement les dépendances manquantes (apt/dnf/pacman)")
 
 	root.AddCommand(
 		newCreateCmd(mgr),
@@ -137,6 +161,9 @@ func newStartCmd(mgr container.Containerizer) *cobra.Command {
 		Short: "Démarrer un conteneur",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := ensureDeps(cmd, "start"); err != nil {
+				return err
+			}
 			if err := mgr.Start(cmd.Context(), args[0]); err != nil {
 				return err
 			}
@@ -153,6 +180,9 @@ func newStopCmd(mgr container.Containerizer) *cobra.Command {
 		Short: "Arrêter un conteneur",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := ensureDeps(cmd, "stop"); err != nil {
+				return err
+			}
 			if err := mgr.Stop(cmd.Context(), args[0]); err != nil {
 				return err
 			}
@@ -189,6 +219,9 @@ func newSSHCmd(mgr container.Containerizer) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
 			if err := container.ValidateName(name); err != nil {
+				return err
+			}
+			if err := ensureDeps(cmd, "ssh"); err != nil {
 				return err
 			}
 			c, err := mgr.Get(cmd.Context(), name)
@@ -236,6 +269,9 @@ func newLogsCmd(mgr container.Containerizer) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
 			if err := container.ValidateName(name); err != nil {
+				return err
+			}
+			if err := ensureDeps(cmd, "logs"); err != nil {
 				return err
 			}
 			// Confirme l'existence du conteneur (les journaux restent
@@ -358,6 +394,9 @@ func newDeployCmd() *cobra.Command {
 		Short: "Déployer l'outil sur un serveur Linux distant (SSH + rsync)",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := ensureDeps(cmd, "deploy"); err != nil {
+				return err
+			}
 			return deploy.New().Deploy(cmd.Context(), cmd.OutOrStdout(), deploy.Options{
 				Target:      deploy.Target{Host: host, User: user, Port: port, Key: key},
 				RemotePath:  remotePath,
@@ -390,6 +429,9 @@ func newRemoteCmd() *cobra.Command {
 		Short: "Exécuter une commande de l'outil sur le serveur distant",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := ensureDeps(cmd, "remote"); err != nil {
+				return err
+			}
 			return deploy.New().Exec(cmd.Context(),
 				deploy.Target{Host: host, User: user, Port: port, Key: key},
 				remotePath, args,
@@ -469,5 +511,44 @@ func newNginxCmd(mgr container.Containerizer) *cobra.Command {
 	for _, f := range []string{"server-name", "upstream", "tls-cert", "tls-key"} {
 		_ = cmd.MarkFlagRequired(f)
 	}
+	cmd.AddCommand(newNginxFmtCmd())
+	return cmd
+}
+
+// newNginxFmtCmd : reformate un fichier de configuration nginx (à la gofmt).
+func newNginxFmtCmd() *cobra.Command {
+	var write bool
+	cmd := &cobra.Command{
+		Use:   "fmt <fichier>",
+		Short: "Reformater un fichier de configuration nginx",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			path := args[0]
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			dirs, err := nginx.Parse(string(data))
+			if err != nil {
+				return apperrors.Wrap("nginx fmt", path, err)
+			}
+			out := nginx.Format(dirs)
+
+			if !write {
+				fmt.Fprint(cmd.OutOrStdout(), out)
+				return nil
+			}
+			info, err := os.Stat(path)
+			if err != nil {
+				return err
+			}
+			if err := os.WriteFile(path, []byte(out), info.Mode().Perm()); err != nil {
+				return apperrors.Wrap("nginx fmt", path, err)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "✅ %s reformaté\n", path)
+			return nil
+		},
+	}
+	cmd.Flags().BoolVarP(&write, "write", "w", false, "réécrire le fichier sur place")
 	return cmd
 }
