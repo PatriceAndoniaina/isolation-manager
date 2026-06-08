@@ -511,8 +511,59 @@ func newNginxCmd(mgr container.Containerizer) *cobra.Command {
 	for _, f := range []string{"server-name", "upstream", "tls-cert", "tls-key"} {
 		_ = cmd.MarkFlagRequired(f)
 	}
-	cmd.AddCommand(newNginxFmtCmd(), newNginxValidateCmd())
+	cmd.AddCommand(newNginxFmtCmd(), newNginxValidateCmd(), newNginxListCmd())
 	return cmd
+}
+
+// newNginxListCmd : liste les fichiers de configuration nginx (*.conf) d'un
+// dossier, avec validation optionnelle (syntaxe + sécurité) de chacun.
+func newNginxListCmd() *cobra.Command {
+	var check bool
+	cmd := &cobra.Command{
+		Use:   "list <dossier>",
+		Short: "Lister les fichiers nginx (*.conf) d'un dossier",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			files, err := nginx.ListFiles(args[0])
+			if err != nil {
+				return err
+			}
+			if len(files) == 0 {
+				fmt.Fprintln(cmd.ErrOrStderr(), "aucun fichier .conf trouvé")
+				return nil
+			}
+			if !check {
+				for _, f := range files {
+					fmt.Fprintln(cmd.OutOrStdout(), f)
+				}
+				return nil
+			}
+			tw := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
+			fmt.Fprintln(tw, "FICHIER\tSTATUT")
+			for _, f := range files {
+				fmt.Fprintf(tw, "%s\t%s\n", f, nginxFileStatus(f))
+			}
+			return tw.Flush()
+		},
+	}
+	cmd.Flags().BoolVarP(&check, "check", "c", false, "valider chaque fichier (syntaxe + sécurité)")
+	return cmd
+}
+
+// nginxFileStatus renvoie un statut lisible pour un fichier nginx.
+func nginxFileStatus(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "⚠️  illisible: " + err.Error()
+	}
+	dirs, err := nginx.Parse(string(data))
+	if err != nil {
+		return "❌ syntaxe: " + err.Error()
+	}
+	if err := nginx.Validate(dirs); err != nil {
+		return "⚠️  sécurité: " + err.Error()
+	}
+	return "✅ OK"
 }
 
 // newNginxValidateCmd : valide la syntaxe et les règles de sécurité d'un

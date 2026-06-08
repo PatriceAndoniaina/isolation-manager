@@ -37,6 +37,7 @@ go build -o bin/isolation-manager ./src/cmd
 | `nginx <name>` | Générer la config reverse proxy durcie |
 | `nginx fmt <fichier>` | Reformater un fichier nginx (`-w` pour écrire sur place) |
 | `nginx validate <fichier>` | Valider syntaxe + règles de sécurité d'un fichier nginx |
+| `nginx list <dossier>` | Lister les fichiers `*.conf` d'un dossier (`-c` pour valider chacun) |
 | `deploy` | Déployer l'outil sur un serveur Linux distant |
 | `remote` | Exécuter une commande sur le serveur distant |
 
