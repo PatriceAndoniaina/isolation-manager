@@ -44,6 +44,7 @@ go build -o bin/isolation-manager ./src/cmd
 | `nginx disable <fichier>` | Désactiver un fichier (retire le lien) |
 | `deploy` | Déployer l'outil sur un serveur Linux distant |
 | `remote` | Exécuter une commande sur le serveur distant |
+| `commands` (`usage`) | Vue à plat de toutes les commandes et leurs utilisations |
 
 Flags globaux : `-v/--verbose`, `--json`, `--version`, `--auto-install`.
 

@@ -104,8 +104,63 @@ func newRootCmd() *cobra.Command {
 		newNginxCmd(mgr),
 		newDeployCmd(),
 		newRemoteCmd(),
+		newCommandsCmd(),
 	)
 	return root
+}
+
+// newCommandsCmd : vue à plat de toutes les commandes (y compris imbriquées) et
+// de leurs utilisations, là où `--help` ne montre qu'un niveau à la fois.
+func newCommandsCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:     "commands",
+		Aliases: []string{"usage"},
+		Short:   "Lister toutes les commandes et leurs utilisations (vue à plat)",
+		Args:    cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			w := cmd.OutOrStdout()
+			fmt.Fprintf(w, "%s — toutes les commandes\n\n", config.AppName)
+			if gf := strings.TrimRight(cmd.Root().PersistentFlags().FlagUsages(), "\n"); gf != "" {
+				fmt.Fprintln(w, "Flags globaux (toutes commandes) :")
+				fmt.Fprintln(w, gf)
+				fmt.Fprintln(w)
+			}
+			printCommands(w, cmd.Root())
+			return nil
+		},
+	}
+}
+
+// printCommands parcourt récursivement l'arbre des commandes et affiche, pour
+// chaque commande exécutable, son chemin complet, sa description et ses flags.
+func printCommands(w io.Writer, c *cobra.Command) {
+	switch c.Name() {
+	case "help", "completion":
+		return // commandes générées par cobra : on ignore la branche entière
+	case "commands": // soi-même : ne pas afficher
+	default:
+		if c.Runnable() {
+			fmt.Fprintln(w, strings.TrimRight(c.CommandPath()+" "+argsPart(c.Use), " "))
+			if c.Short != "" {
+				fmt.Fprintf(w, "    %s\n", c.Short)
+			}
+			if usages := strings.TrimRight(c.LocalFlags().FlagUsages(), "\n"); usages != "" {
+				fmt.Fprintln(w, usages)
+			}
+			fmt.Fprintln(w)
+		}
+	}
+	for _, sub := range c.Commands() {
+		printCommands(w, sub)
+	}
+}
+
+// argsPart renvoie la portion "arguments" d'un champ Use (après le nom).
+func argsPart(use string) string {
+	if i := strings.IndexByte(use, ' '); i >= 0 {
+		return use[i+1:]
+	}
+	return ""
 }
 
 // newCreateCmd : création d'un conteneur isolé.
