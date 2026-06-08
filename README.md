@@ -39,6 +39,8 @@ go build -o bin/isolation-manager ./src/cmd
 | `nginx validate <fichier>` | Valider syntaxe + règles de sécurité d'un fichier nginx |
 | `nginx list <dossier>` | Lister les fichiers `*.conf` d'un dossier (`-c` pour valider chacun) |
 | `nginx rm <fichier>` | Supprimer un fichier `*.conf` (confirmation, `-f` pour forcer) |
+| `nginx enable <fichier>` | Activer un fichier (lien dans `sites-enabled`) |
+| `nginx disable <fichier>` | Désactiver un fichier (retire le lien) |
 | `deploy` | Déployer l'outil sur un serveur Linux distant |
 | `remote` | Exécuter une commande sur le serveur distant |
 

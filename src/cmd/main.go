@@ -513,7 +513,68 @@ func newNginxCmd(mgr container.Containerizer) *cobra.Command {
 	for _, f := range []string{"server-name", "upstream", "tls-cert", "tls-key"} {
 		_ = cmd.MarkFlagRequired(f)
 	}
-	cmd.AddCommand(newNginxFmtCmd(), newNginxValidateCmd(), newNginxListCmd(), newNginxRmCmd())
+	cmd.AddCommand(newNginxFmtCmd(), newNginxValidateCmd(), newNginxListCmd(), newNginxRmCmd(),
+		newNginxEnableCmd(), newNginxDisableCmd())
+	return cmd
+}
+
+// newNginxEnableCmd : active un fichier (lien sites-available → sites-enabled).
+func newNginxEnableCmd() *cobra.Command {
+	var enabledDir string
+	cmd := &cobra.Command{
+		Use:   "enable <fichier>",
+		Short: "Activer un fichier nginx (lien dans sites-enabled)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			file := args[0]
+			if !nginx.IsConfigFile(file) {
+				return fmt.Errorf("%q n'est pas un fichier .conf", file)
+			}
+			dir := enabledDir
+			if dir == "" {
+				dir = nginx.EnabledDir(file)
+			}
+			link, created, err := nginx.Enable(file, dir)
+			if err != nil {
+				return err
+			}
+			if created {
+				fmt.Fprintf(cmd.OutOrStdout(), "✅ activé : %s → %s\n", link, file)
+			} else {
+				fmt.Fprintf(cmd.OutOrStdout(), "déjà activé : %s\n", link)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&enabledDir, "enabled-dir", "", "dossier sites-enabled (défaut: frère du fichier)")
+	return cmd
+}
+
+// newNginxDisableCmd : désactive un fichier (retire le lien de sites-enabled).
+func newNginxDisableCmd() *cobra.Command {
+	var enabledDir string
+	cmd := &cobra.Command{
+		Use:   "disable <fichier>",
+		Short: "Désactiver un fichier nginx (retire le lien de sites-enabled)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			file := args[0]
+			if !nginx.IsConfigFile(file) {
+				return fmt.Errorf("%q n'est pas un fichier .conf", file)
+			}
+			dir := enabledDir
+			if dir == "" {
+				dir = nginx.EnabledDir(file)
+			}
+			link, err := nginx.Disable(file, dir)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "⏸️  désactivé : %s\n", link)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&enabledDir, "enabled-dir", "", "dossier sites-enabled (défaut: frère du fichier)")
 	return cmd
 }
 
