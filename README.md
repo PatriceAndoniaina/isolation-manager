@@ -38,6 +38,7 @@ go build -o bin/isolation-manager ./src/cmd
 | `nginx fmt <fichier>` | Reformater un fichier nginx (`-w` pour écrire sur place) |
 | `nginx validate <fichier>` | Valider syntaxe + règles de sécurité (parser maison, hors-ligne) |
 | `nginx test [fichier]` | Tester la config via le binaire nginx (`nginx -t`) |
+| `nginx reload` | Recharger nginx à chaud (`nginx -t` puis reload adapté à l'OS : systemctl/service/`nginx -s reload`) |
 | `nginx list <dossier>` | Lister les fichiers `*.conf` d'un dossier (`-c` pour valider chacun) |
 | `nginx rm <fichier>` | Supprimer un fichier `*.conf` (confirmation, `-f` pour forcer) |
 | `nginx enable <fichier>` | Activer un fichier (lien dans `sites-enabled`) |

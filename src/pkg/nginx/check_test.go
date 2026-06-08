@@ -59,6 +59,50 @@ func TestCheckFailure(t *testing.T) {
 	}
 }
 
+// has renvoie un détecteur de binaire simulant la présence des noms donnés.
+func has(names ...string) func(string) bool {
+	set := map[string]bool{}
+	for _, n := range names {
+		set[n] = true
+	}
+	return func(n string) bool { return set[n] }
+}
+
+func TestReloadAdaptsToOS(t *testing.T) {
+	tests := []struct {
+		name string
+		goos string
+		look func(string) bool
+		want string
+	}{
+		{"linux systemd", "linux", has("systemctl"), "systemctl reload nginx"},
+		{"linux sysv", "linux", has("service"), "service nginx reload"},
+		{"linux systemd prioritaire", "linux", has("systemctl", "service"), "systemctl reload nginx"},
+		{"linux sans gestionnaire", "linux", has(), "nginx -s reload"},
+		{"darwin", "darwin", has("systemctl"), "nginx -s reload"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fr := &fakeRunner{}
+			te := NewTester(WithRunner(fr), WithGOOS(tt.goos), WithLooker(tt.look))
+			if _, err := te.Reload(context.Background()); err != nil {
+				t.Fatalf("Reload: %v", err)
+			}
+			if got := strings.Join(fr.calls[0], " "); got != tt.want {
+				t.Errorf("reload cmd = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestReloadFailure(t *testing.T) {
+	fr := &fakeRunner{out: []byte("nginx: [error] ... failed"), err: errors.New("exit 1")}
+	te := NewTester(WithRunner(fr), WithGOOS("linux"), WithLooker(has("systemctl")))
+	if _, err := te.Reload(context.Background()); err == nil {
+		t.Fatal("Reload = nil, want error")
+	}
+}
+
 func TestExecRunner(t *testing.T) {
 	out, err := execRunner{}.Run(context.Background(), []string{"echo", "ok"})
 	if err != nil || strings.TrimSpace(string(out)) != "ok" {
