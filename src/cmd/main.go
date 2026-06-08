@@ -4,6 +4,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -511,7 +513,49 @@ func newNginxCmd(mgr container.Containerizer) *cobra.Command {
 	for _, f := range []string{"server-name", "upstream", "tls-cert", "tls-key"} {
 		_ = cmd.MarkFlagRequired(f)
 	}
-	cmd.AddCommand(newNginxFmtCmd(), newNginxValidateCmd(), newNginxListCmd())
+	cmd.AddCommand(newNginxFmtCmd(), newNginxValidateCmd(), newNginxListCmd(), newNginxRmCmd())
+	return cmd
+}
+
+// newNginxRmCmd : supprime un fichier de configuration nginx (*.conf), avec
+// confirmation (sautée par -f) et garde-fou sur l'extension.
+func newNginxRmCmd() *cobra.Command {
+	var force bool
+	cmd := &cobra.Command{
+		Use:     "rm <fichier>",
+		Aliases: []string{"delete"},
+		Short:   "Supprimer un fichier de configuration nginx (*.conf)",
+		Args:    cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			path := args[0]
+			if !nginx.IsConfigFile(path) {
+				return fmt.Errorf("refus de suppression : %q n'est pas un fichier .conf", path)
+			}
+			info, err := os.Stat(path)
+			if err != nil {
+				return err
+			}
+			if info.IsDir() {
+				return fmt.Errorf("%q est un dossier, pas un fichier", path)
+			}
+			if !force {
+				fmt.Fprintf(cmd.OutOrStdout(), "Supprimer %s ? [y/N] ", path)
+				line, _ := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
+				switch strings.ToLower(strings.TrimSpace(line)) {
+				case "y", "yes", "o", "oui":
+				default:
+					fmt.Fprintln(cmd.OutOrStdout(), "annulé")
+					return nil
+				}
+			}
+			if err := os.Remove(path); err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "🗑️  %s supprimé\n", path)
+			return nil
+		},
+	}
+	cmd.Flags().BoolVarP(&force, "force", "f", false, "supprimer sans confirmation")
 	return cmd
 }
 

@@ -60,6 +60,22 @@ func TestListFilesMissingDir(t *testing.T) {
 	}
 }
 
+func TestIsConfigFile(t *testing.T) {
+	tests := map[string]bool{
+		"site.conf":                true,
+		"/etc/nginx/conf.d/a.conf": true,
+		"nginx.conf":               true,
+		"README.md":                false,
+		"site.conf.bak":            false,
+		"conf":                     false,
+	}
+	for path, want := range tests {
+		if got := IsConfigFile(path); got != want {
+			t.Errorf("IsConfigFile(%q) = %v, want %v", path, got, want)
+		}
+	}
+}
+
 func sortedAscending(s []string) bool {
 	for i := 1; i < len(s); i++ {
 		if s[i-1] > s[i] {
