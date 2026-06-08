@@ -35,13 +35,14 @@ import (
 // opDeps liste les binaires externes que chaque commande exécute réellement.
 // Le preflight les vérifie (et les installe si --auto-install) avant l'action.
 var opDeps = map[string][]string{
-	"start":      {"systemd-run", "systemd-nspawn"},
-	"stop":       {"machinectl"},
-	"ssh":        {"ssh", "ssh-keygen"},
-	"logs":       {"journalctl"},
-	"deploy":     {"ssh", "rsync", "go"},
-	"remote":     {"ssh"},
-	"nginx-test": {"nginx"},
+	"start":        {"systemd-run", "systemd-nspawn"},
+	"stop":         {"machinectl"},
+	"ssh":          {"ssh", "ssh-keygen"},
+	"logs":         {"journalctl"},
+	"deploy":       {"ssh", "rsync", "go"},
+	"remote":       {"ssh"},
+	"nginx-test":   {"nginx"},
+	"nginx-reload": {"nginx"},
 }
 
 // ensureDeps lance le preflight pour l'opération op (no-op si rien à vérifier).
@@ -583,7 +584,40 @@ func newNginxCmd(mgr container.Containerizer) *cobra.Command {
 		_ = cmd.MarkFlagRequired(f)
 	}
 	cmd.AddCommand(newNginxFmtCmd(), newNginxValidateCmd(), newNginxListCmd(), newNginxRmCmd(),
-		newNginxEnableCmd(), newNginxDisableCmd(), newNginxTestCmd())
+		newNginxEnableCmd(), newNginxDisableCmd(), newNginxTestCmd(), newNginxReloadCmd())
+	return cmd
+}
+
+// newNginxReloadCmd : recharge la configuration nginx à chaud (nginx -s reload),
+// après l'avoir testée (nginx -t) sauf si --no-test.
+func newNginxReloadCmd() *cobra.Command {
+	var noTest bool
+	cmd := &cobra.Command{
+		Use:   "reload",
+		Short: "Recharger la configuration nginx (nginx -s reload)",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := ensureDeps(cmd, "nginx-reload"); err != nil {
+				return err
+			}
+			tester := nginx.NewTester()
+			// Test préalable : ne jamais recharger une config invalide.
+			if !noTest {
+				if out, err := tester.Check(cmd.Context(), ""); err != nil {
+					_, _ = cmd.OutOrStdout().Write(out)
+					return err
+				}
+			}
+			out, err := tester.Reload(cmd.Context())
+			_, _ = cmd.OutOrStdout().Write(out)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), "✅ nginx rechargé")
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&noTest, "no-test", false, "recharger sans tester la config au préalable")
 	return cmd
 }
 
