@@ -31,7 +31,7 @@ go build -o bin/isolation-manager ./src/cmd
 | `list` (`ls`) | Lister les conteneurs |
 | `start` / `stop` | Démarrer / arrêter |
 | `destroy` (`rm`) | Détruire (rootfs + métadonnées) |
-| `ssh <name>` | Session SSH durcie (clé ED25519, `--user`) |
+| `ssh <name>` | Session SSH (clé ED25519 par défaut ; `--password` opt-in, `--user`) |
 | `logs <name>` | Journaux journald (`--follow`, `--lines`, `--since`) |
 | `stats <name>` | Métriques cgroup v2 (`--watch`, `--interval`) |
 | `nginx <name>` | Générer la config reverse proxy durcie |

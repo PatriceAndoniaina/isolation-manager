@@ -170,6 +170,9 @@ type ConnectOptions struct {
 	Container *container.Container
 	User      string // défaut config.SSHUser si vide
 	Streams   Streams
+	// Password active l'authentification par mot de passe (opt-in explicite,
+	// sécurité réduite). Par défaut faux : clé uniquement (rules/security.md).
+	Password bool
 }
 
 // Connect ouvre une session SSH interactive durcie vers le conteneur. La paire
@@ -182,9 +185,13 @@ func (m *Manager) Connect(ctx context.Context, opts ConnectOptions) error {
 	if err := container.ValidateName(c.Name); err != nil {
 		return err
 	}
-	if _, err := os.Stat(m.keyPath(c.Name)); err != nil {
-		return apperrors.Wrap("ssh", c.Name,
-			fmt.Errorf("clé absente (générer via EnsureKey): %w", err))
+	// En mode clé (défaut), la paire doit exister ; en mode mot de passe,
+	// la clé est facultative (ssh demandera le mot de passe).
+	if !opts.Password {
+		if _, err := os.Stat(m.keyPath(c.Name)); err != nil {
+			return apperrors.Wrap("ssh", c.Name,
+				fmt.Errorf("clé absente (générer via EnsureKey): %w", err))
+		}
 	}
 
 	user := opts.User
@@ -192,30 +199,46 @@ func (m *Manager) Connect(ctx context.Context, opts ConnectOptions) error {
 		user = config.SSHUser
 	}
 
-	argv := m.connectArgs(c, user)
-	log.Audit("ssh", c.Name, log.Fields{"user": user, "port": c.SSHPort})
+	argv := m.connectArgs(c, user, opts.Password)
+	log.Audit("ssh", c.Name, log.Fields{"user": user, "port": c.SSHPort, "password_auth": opts.Password})
 	return apperrors.Wrap("ssh", c.Name, m.exec.Interactive(ctx, argv, opts.Streams))
 }
 
-// connectArgs construit la ligne de commande SSH durcie.
+// connectArgs construit la ligne de commande SSH.
 //
-// Options imposées (rules/security.md → SSH Hardening) :
-//   - IdentitiesOnly + PreferredAuthentications=publickey : seule la clé fournie
-//     est présentée, jamais de repli interactif
-//   - PasswordAuthentication=no : authentification par mot de passe refusée
-//   - ForwardAgent=no : pas de forwarding d'agent SSH
-//   - port applicatif (> 10000) redirigé sur la loopback hôte
-func (m *Manager) connectArgs(c *container.Container, user string) []string {
-	return []string{
-		"ssh",
-		"-i", m.keyPath(c.Name),
-		"-p", strconv.Itoa(c.SSHPort),
-		"-o", "IdentitiesOnly=yes",
-		"-o", "PubkeyAuthentication=yes",
-		"-o", "PasswordAuthentication=no",
-		"-o", "PreferredAuthentications=publickey",
+// Par défaut (password=false), durcissement imposé (rules/security.md → SSH
+// Hardening) : clé uniquement (IdentitiesOnly + PreferredAuthentications=publickey),
+// mot de passe refusé, pas de forwarding d'agent, port applicatif (> 10000)
+// redirigé sur la loopback hôte.
+//
+// Avec password=true (opt-in explicite, sécurité réduite), on autorise le mot
+// de passe : ssh le demandera de façon interactive. La clé reste proposée si
+// elle existe. ForwardAgent=no est conservé dans les deux cas.
+func (m *Manager) connectArgs(c *container.Container, user string, password bool) []string {
+	argv := []string{"ssh", "-p", strconv.Itoa(c.SSHPort)}
+
+	if password {
+		argv = append(argv,
+			"-o", "PubkeyAuthentication=yes",
+			"-o", "PreferredAuthentications=publickey,password",
+		)
+		if _, err := os.Stat(m.keyPath(c.Name)); err == nil {
+			argv = append(argv, "-i", m.keyPath(c.Name), "-o", "IdentitiesOnly=yes")
+		}
+	} else {
+		argv = append(argv,
+			"-i", m.keyPath(c.Name),
+			"-o", "IdentitiesOnly=yes",
+			"-o", "PubkeyAuthentication=yes",
+			"-o", "PasswordAuthentication=no",
+			"-o", "PreferredAuthentications=publickey",
+		)
+	}
+
+	argv = append(argv,
 		"-o", "ForwardAgent=no",
 		"-o", "StrictHostKeyChecking=accept-new",
 		fmt.Sprintf("%s@%s", user, config.SSHHost),
-	}
+	)
+	return argv
 }

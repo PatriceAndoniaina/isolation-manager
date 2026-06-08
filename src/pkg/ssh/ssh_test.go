@@ -124,7 +124,7 @@ func TestEnsureKeyFailure(t *testing.T) {
 func TestConnectArgsHardening(t *testing.T) {
 	m := newTestManager(t, nil)
 	c := &container.Container{Name: "hard", SSHPort: 12345}
-	argv := m.connectArgs(c, "root")
+	argv := m.connectArgs(c, "root", false)
 	joined := strings.Join(argv, " ")
 
 	required := []string{
@@ -144,6 +144,37 @@ func TestConnectArgsHardening(t *testing.T) {
 	}
 	if argv[0] != "ssh" {
 		t.Errorf("argv[0] = %q, want ssh", argv[0])
+	}
+}
+
+func TestConnectArgsPasswordMode(t *testing.T) {
+	m := newTestManager(t, nil)
+	c := &container.Container{Name: "pwd", SSHPort: 12345}
+	joined := strings.Join(m.connectArgs(c, "root", true), " ")
+
+	// Mot de passe autorisé, mais PasswordAuthentication=no ne doit PAS y être.
+	if !strings.Contains(joined, "PreferredAuthentications=publickey,password") {
+		t.Errorf("password mode should allow password: %s", joined)
+	}
+	if strings.Contains(joined, "PasswordAuthentication=no") {
+		t.Errorf("password mode must not force PasswordAuthentication=no: %s", joined)
+	}
+	// Le durcissement non lié à l'auth est conservé.
+	if !strings.Contains(joined, "ForwardAgent=no") {
+		t.Errorf("ForwardAgent=no must remain in password mode: %s", joined)
+	}
+}
+
+func TestConnectPasswordNoKeyRequired(t *testing.T) {
+	// En mode mot de passe, aucune clé n'est requise : Connect doit réussir.
+	fe := &fakeExecutor{}
+	m := newTestManager(t, fe)
+	c := &container.Container{Name: "nokeypwd", SSHPort: 10001}
+	if err := m.Connect(context.Background(), ConnectOptions{Container: c, Password: true}); err != nil {
+		t.Fatalf("Connect (password, no key): %v", err)
+	}
+	if len(fe.interactCall) != 1 {
+		t.Fatalf("interactive called %d times, want 1", len(fe.interactCall))
 	}
 }
 

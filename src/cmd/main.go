@@ -212,9 +212,12 @@ func newDestroyCmd(mgr container.Containerizer) *cobra.Command {
 	}
 }
 
-// newSSHCmd : ouverture d'une session SSH durcie vers un conteneur.
+// newSSHCmd : ouverture d'une session SSH vers un conteneur (durcie par défaut).
 func newSSHCmd(mgr container.Containerizer) *cobra.Command {
-	var user string
+	var (
+		user     string
+		password bool
+	)
 	cmd := &cobra.Command{
 		Use:   "ssh <name>",
 		Short: "Se connecter en SSH à un conteneur",
@@ -236,16 +239,24 @@ func newSSHCmd(mgr container.Containerizer) *cobra.Command {
 			}
 
 			sshMgr := ssh.New()
-			// Garantit la paire de clés puis l'injecte dans le rootfs du conteneur.
-			if _, err := sshMgr.EnsureKey(cmd.Context(), name); err != nil {
-				return err
-			}
-			if err := sshMgr.InstallKey(name, filepath.Join(config.MachinesDir, name)); err != nil {
-				return err
+			if password {
+				// Opt-in explicite : on prévient et on saute la mise en place
+				// des clés (ssh demandera le mot de passe).
+				fmt.Fprintln(cmd.ErrOrStderr(),
+					"⚠️  authentification par mot de passe activée (sécurité réduite — clé recommandée)")
+			} else {
+				// Mode clé : garantit la paire et l'injecte dans le rootfs.
+				if _, err := sshMgr.EnsureKey(cmd.Context(), name); err != nil {
+					return err
+				}
+				if err := sshMgr.InstallKey(name, filepath.Join(config.MachinesDir, name)); err != nil {
+					return err
+				}
 			}
 			return sshMgr.Connect(cmd.Context(), ssh.ConnectOptions{
 				Container: c,
 				User:      user,
+				Password:  password,
 				Streams: ssh.Streams{
 					In:  cmd.InOrStdin(),
 					Out: cmd.OutOrStdout(),
@@ -255,6 +266,8 @@ func newSSHCmd(mgr container.Containerizer) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&user, "user", "u", config.SSHUser, "utilisateur SSH cible")
+	cmd.Flags().BoolVar(&password, "password", false,
+		"authentification par mot de passe (opt-in, sécurité réduite ; clé par défaut)")
 	return cmd
 }
 

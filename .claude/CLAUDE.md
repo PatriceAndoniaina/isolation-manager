@@ -53,7 +53,7 @@ code_standards:
 security_gates:
   - no --privileged containers
   - no unvalidated / wildcard mounts
-  - no password auth SSH (key-only)
+  - SSH key-only by default (password only via explicit --password opt-in)
   - all system operations logged (audit trail)
   - no hardcoded secrets (gitleaks)
   - no race conditions (go test -race)
