@@ -251,6 +251,42 @@ func TestInstallKeyMissing(t *testing.T) {
 	}
 }
 
+func TestConnectInvalidName(t *testing.T) {
+	m := newTestManager(t, &fakeExecutor{})
+	c := &container.Container{Name: "Bad/Name", SSHPort: 10001}
+	if err := m.Connect(context.Background(), ConnectOptions{Container: c}); !apperrors.Is(err, apperrors.ErrInvalidName) {
+		t.Fatalf("err = %v, want ErrInvalidName", err)
+	}
+}
+
+func TestEnsureKeyStatError(t *testing.T) {
+	// keysDir placé sous un fichier : os.Stat de la clé renvoie une erreur
+	// ENOTDIR (différente de NotExist) → branche d'erreur de EnsureKey.
+	file := filepath.Join(t.TempDir(), "f")
+	if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m := New(WithExecutor(&fakeExecutor{}), WithKeysDir(filepath.Join(file, "keys")))
+	if _, err := m.EnsureKey(context.Background(), "user01"); err == nil {
+		t.Fatal("EnsureKey = nil, want stat error")
+	}
+}
+
+func TestInstallKeyMkdirError(t *testing.T) {
+	m := newTestManager(t, &fakeExecutor{})
+	if _, err := m.EnsureKey(context.Background(), "inst"); err != nil {
+		t.Fatalf("EnsureKey: %v", err)
+	}
+	// rootfs est un fichier régulier → la création de root/.ssh échoue.
+	file := filepath.Join(t.TempDir(), "rootfs")
+	if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.InstallKey("inst", file); err == nil {
+		t.Fatal("InstallKey = nil, want mkdir error")
+	}
+}
+
 func TestSystemExecutor(t *testing.T) {
 	ctx := context.Background()
 	e := systemExecutor{}
