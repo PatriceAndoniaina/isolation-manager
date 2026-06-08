@@ -36,6 +36,7 @@ go build -o bin/isolation-manager ./src/cmd
 | `stats <name>` | Métriques cgroup v2 (`--watch`, `--interval`) |
 | `nginx <name>` | Générer la config reverse proxy durcie |
 | `nginx fmt <fichier>` | Reformater un fichier nginx (`-w` pour écrire sur place) |
+| `nginx validate <fichier>` | Valider syntaxe + règles de sécurité d'un fichier nginx |
 | `deploy` | Déployer l'outil sur un serveur Linux distant |
 | `remote` | Exécuter une commande sur le serveur distant |
 

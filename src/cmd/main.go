@@ -511,8 +511,34 @@ func newNginxCmd(mgr container.Containerizer) *cobra.Command {
 	for _, f := range []string{"server-name", "upstream", "tls-cert", "tls-key"} {
 		_ = cmd.MarkFlagRequired(f)
 	}
-	cmd.AddCommand(newNginxFmtCmd())
+	cmd.AddCommand(newNginxFmtCmd(), newNginxValidateCmd())
 	return cmd
+}
+
+// newNginxValidateCmd : valide la syntaxe et les règles de sécurité d'un
+// fichier nginx (TLS imposé, rate limit, limite de taille, pas d'upstream hôte).
+func newNginxValidateCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "validate <fichier>",
+		Short: "Valider la syntaxe et la sécurité d'un fichier nginx",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			path := args[0]
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			dirs, err := nginx.Parse(string(data))
+			if err != nil {
+				return apperrors.Wrap("nginx validate", path, err)
+			}
+			if err := nginx.Validate(dirs); err != nil {
+				return apperrors.Wrap("nginx validate", path, err)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "✅ %s : syntaxe et règles de sécurité OK\n", path)
+			return nil
+		},
+	}
 }
 
 // newNginxFmtCmd : reformate un fichier de configuration nginx (à la gofmt).
