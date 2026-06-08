@@ -36,7 +36,8 @@ go build -o bin/isolation-manager ./src/cmd
 | `stats <name>` | Métriques cgroup v2 (`--watch`, `--interval`) |
 | `nginx <name>` | Générer la config reverse proxy durcie |
 | `nginx fmt <fichier>` | Reformater un fichier nginx (`-w` pour écrire sur place) |
-| `nginx validate <fichier>` | Valider syntaxe + règles de sécurité d'un fichier nginx |
+| `nginx validate <fichier>` | Valider syntaxe + règles de sécurité (parser maison, hors-ligne) |
+| `nginx test [fichier]` | Tester la config via le binaire nginx (`nginx -t`) |
 | `nginx list <dossier>` | Lister les fichiers `*.conf` d'un dossier (`-c` pour valider chacun) |
 | `nginx rm <fichier>` | Supprimer un fichier `*.conf` (confirmation, `-f` pour forcer) |
 | `nginx enable <fichier>` | Activer un fichier (lien dans `sites-enabled`) |

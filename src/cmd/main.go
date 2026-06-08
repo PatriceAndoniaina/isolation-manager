@@ -35,12 +35,13 @@ import (
 // opDeps liste les binaires externes que chaque commande exécute réellement.
 // Le preflight les vérifie (et les installe si --auto-install) avant l'action.
 var opDeps = map[string][]string{
-	"start":  {"systemd-run", "systemd-nspawn"},
-	"stop":   {"machinectl"},
-	"ssh":    {"ssh", "ssh-keygen"},
-	"logs":   {"journalctl"},
-	"deploy": {"ssh", "rsync", "go"},
-	"remote": {"ssh"},
+	"start":      {"systemd-run", "systemd-nspawn"},
+	"stop":       {"machinectl"},
+	"ssh":        {"ssh", "ssh-keygen"},
+	"logs":       {"journalctl"},
+	"deploy":     {"ssh", "rsync", "go"},
+	"remote":     {"ssh"},
+	"nginx-test": {"nginx"},
 }
 
 // ensureDeps lance le preflight pour l'opération op (no-op si rien à vérifier).
@@ -514,8 +515,29 @@ func newNginxCmd(mgr container.Containerizer) *cobra.Command {
 		_ = cmd.MarkFlagRequired(f)
 	}
 	cmd.AddCommand(newNginxFmtCmd(), newNginxValidateCmd(), newNginxListCmd(), newNginxRmCmd(),
-		newNginxEnableCmd(), newNginxDisableCmd())
+		newNginxEnableCmd(), newNginxDisableCmd(), newNginxTestCmd())
 	return cmd
+}
+
+// newNginxTestCmd : teste la configuration via le binaire nginx (`nginx -t`).
+func newNginxTestCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "test [fichier]",
+		Short: "Tester la configuration via le binaire nginx (nginx -t)",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := ensureDeps(cmd, "nginx-test"); err != nil {
+				return err
+			}
+			var file string
+			if len(args) == 1 {
+				file = args[0]
+			}
+			out, err := nginx.NewTester().Check(cmd.Context(), file)
+			_, _ = cmd.OutOrStdout().Write(out)
+			return err
+		},
+	}
 }
 
 // newNginxEnableCmd : active un fichier (lien sites-available → sites-enabled).
