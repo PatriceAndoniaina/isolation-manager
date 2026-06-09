@@ -1,0 +1,18 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(git push*)",
+            "command": "cd \"${CLAUDE_PROJECT_DIR:-.}\" && if out=$(go test ./src/... 2>&1); then jq -nc '{hookSpecificOutput:{hookEventName:\"PreToolUse\",permissionDecision:\"allow\",permissionDecisionReason:\"go test ./src/... : tous les tests passent, push autorisé.\"}}'; else msg=$(printf '%s' \"$out\" | tr \"\\n\\r\\t\" \"   \" | tail -c 1200); jq -nc --arg o \"$msg\" '{hookSpecificOutput:{hookEventName:\"PreToolUse\",permissionDecision:\"deny\",permissionDecisionReason:(\"Push bloque : go test ./src/... a echoue. Corrige les tests avant de pousser. \" + $o)}}'; fi",
+            "timeout": 120,
+            "statusMessage": "go test ./src/... avant push"
+          }
+        ]
+      }
+    ]
+  }
+}
