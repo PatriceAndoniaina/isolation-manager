@@ -38,7 +38,7 @@ go build -o bin/isolation-manager ./src/cmd
 | `nginx fmt <fichier>` | Reformater un fichier nginx (`-w` pour écrire sur place) |
 | `nginx validate <fichier>` | Valider syntaxe + règles de sécurité (parser maison, hors-ligne) |
 | `nginx test [fichier]` | Tester la config via le binaire nginx (`nginx -t`) |
-| `nginx reload` | Recharger nginx à chaud (`nginx -t` puis reload adapté à l'OS : systemctl/service/`nginx -s reload`) |
+| `nginx reload [conteneur]` | Recharger le reverse proxy nginx de l'hôte (`nginx -t` puis reload adapté à l'OS) ; avec un conteneur, applique sa config de proxy (le conteneur doit exister) |
 | `nginx restart` | Redémarrer nginx (`nginx -t` puis restart adapté à l'OS) |
 | `nginx status` | Afficher l'état du service nginx (`systemctl`/`service status`) |
 | `nginx version` | Afficher la version de nginx (`nginx -v`) |

@@ -585,8 +585,9 @@ func newNginxCmd(mgr container.Containerizer) *cobra.Command {
 		_ = cmd.MarkFlagRequired(f)
 	}
 	cmd.AddCommand(newNginxFmtCmd(), newNginxValidateCmd(), newNginxListCmd(), newNginxRmCmd(),
-		newNginxEnableCmd(), newNginxDisableCmd(), newNginxTestCmd(), newNginxReloadCmd(),
-		newNginxRestartCmd(), newNginxStatusCmd(), newNginxVersionCmd())
+		newNginxEnableCmd(), newNginxDisableCmd(), newNginxTestCmd(),
+		newNginxRestartCmd(), newNginxStatusCmd(), newNginxVersionCmd(),
+		newNginxReloadCmd(mgr))
 	return cmd
 }
 
@@ -652,18 +653,31 @@ func newNginxRestartCmd() *cobra.Command {
 	return cmd
 }
 
-// newNginxReloadCmd : recharge la configuration nginx à chaud (nginx -s reload),
-// après l'avoir testée (nginx -t) sauf si --no-test.
-func newNginxReloadCmd() *cobra.Command {
+// newNginxReloadCmd : recharge le reverse proxy nginx de l'hôte (test nginx -t
+// puis reload adapté à l'OS, sauf --no-test). Avec un argument conteneur, le
+// conteneur doit exister : on applique alors sa config de proxy côté hôte.
+func newNginxReloadCmd(mgr container.Containerizer) *cobra.Command {
 	var noTest bool
 	cmd := &cobra.Command{
-		Use:   "reload",
-		Short: "Recharger la configuration nginx (nginx -s reload)",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
+		Use:   "reload [conteneur]",
+		Short: "Recharger le reverse proxy nginx de l'hôte (optionnellement pour un conteneur)",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := ensureDeps(cmd, "nginx-reload"); err != nil {
 				return err
 			}
+			var name string
+			if len(args) == 1 {
+				name = args[0]
+				if err := container.ValidateName(name); err != nil {
+					return err
+				}
+				// Confirme que le conteneur existe avant de recharger son proxy.
+				if _, err := mgr.Get(cmd.Context(), name); err != nil {
+					return err
+				}
+			}
+
 			tester := nginx.NewTester()
 			// Test préalable : ne jamais recharger une config invalide.
 			if !noTest {
@@ -677,7 +691,12 @@ func newNginxReloadCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), "✅ nginx rechargé")
+			if name != "" {
+				fmt.Fprintf(cmd.OutOrStdout(),
+					"✅ reverse proxy nginx (hôte) rechargé pour le conteneur %q\n", name)
+			} else {
+				fmt.Fprintln(cmd.OutOrStdout(), "✅ nginx rechargé")
+			}
 			return nil
 		},
 	}
