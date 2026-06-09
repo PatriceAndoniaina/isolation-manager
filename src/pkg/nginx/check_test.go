@@ -143,6 +143,27 @@ func TestRestartFallbackStopThenStart(t *testing.T) {
 	}
 }
 
+func TestVersion(t *testing.T) {
+	fr := &fakeRunner{out: []byte("nginx version: nginx/1.27.0\n")}
+	out, err := NewTester(WithRunner(fr)).Version(context.Background())
+	if err != nil {
+		t.Fatalf("Version: %v", err)
+	}
+	if got := strings.Join(fr.calls[0], " "); got != "nginx -v" {
+		t.Errorf("argv = %q, want \"nginx -v\"", got)
+	}
+	if !strings.Contains(string(out), "nginx/") {
+		t.Errorf("out = %q", out)
+	}
+}
+
+func TestVersionFailure(t *testing.T) {
+	fr := &fakeRunner{err: errors.New("command not found")}
+	if _, err := NewTester(WithRunner(fr)).Version(context.Background()); err == nil {
+		t.Fatal("Version = nil, want error when nginx absent")
+	}
+}
+
 func TestStatusViaServiceManager(t *testing.T) {
 	tests := []struct {
 		name string

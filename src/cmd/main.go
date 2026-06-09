@@ -586,8 +586,22 @@ func newNginxCmd(mgr container.Containerizer) *cobra.Command {
 	}
 	cmd.AddCommand(newNginxFmtCmd(), newNginxValidateCmd(), newNginxListCmd(), newNginxRmCmd(),
 		newNginxEnableCmd(), newNginxDisableCmd(), newNginxTestCmd(), newNginxReloadCmd(),
-		newNginxRestartCmd(), newNginxStatusCmd())
+		newNginxRestartCmd(), newNginxStatusCmd(), newNginxVersionCmd())
 	return cmd
+}
+
+// newNginxVersionCmd : affiche la version de nginx (nginx -v). Lecture seule.
+func newNginxVersionCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Afficher la version de nginx (nginx -v)",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			out, err := nginx.NewTester().Version(cmd.Context())
+			_, _ = cmd.OutOrStdout().Write(out)
+			return err
+		},
+	}
 }
 
 // newNginxStatusCmd : affiche l'état du service nginx (systemctl/service status).

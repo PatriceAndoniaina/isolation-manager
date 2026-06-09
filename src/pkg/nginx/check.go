@@ -128,6 +128,12 @@ func (t *Tester) Restart(ctx context.Context) ([]byte, error) {
 	return t.run(ctx, []string{"nginx"})
 }
 
+// Version renvoie la version de nginx (`nginx -v`). nginx écrit la version sur
+// stderr, capturée par le Runner (sortie combinée).
+func (t *Tester) Version(ctx context.Context) ([]byte, error) {
+	return t.run(ctx, []string{"nginx", "-v"})
+}
+
 // Status renvoie l'état du service nginx via le gestionnaire de services
 // (`systemctl status nginx` ou `service nginx status`). L'erreur du runner est
 // renvoyée brute (un code non nul signale simplement « inactif », pas un échec
