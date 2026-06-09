@@ -127,3 +127,18 @@ func (t *Tester) Restart(ctx context.Context) ([]byte, error) {
 	_, _ = t.run(ctx, []string{"nginx", "-s", "stop"})
 	return t.run(ctx, []string{"nginx"})
 }
+
+// Status renvoie l'état du service nginx via le gestionnaire de services
+// (`systemctl status nginx` ou `service nginx status`). L'erreur du runner est
+// renvoyée brute (un code non nul signale simplement « inactif », pas un échec
+// de commande). Sur un hôte sans gestionnaire de services, renvoie une erreur
+// explicite plutôt qu'un statut deviné.
+func (t *Tester) Status(ctx context.Context) ([]byte, error) {
+	argv := t.serviceCmd("status")
+	if argv == nil {
+		return nil, fmt.Errorf("statut indisponible : aucun gestionnaire de services (systemctl/service) sur cet hôte")
+	}
+	ctx, cancel := context.WithTimeout(ctx, config.DefaultExecTimeout)
+	defer cancel()
+	return t.runner.Run(ctx, argv)
+}

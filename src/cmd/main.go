@@ -586,8 +586,23 @@ func newNginxCmd(mgr container.Containerizer) *cobra.Command {
 	}
 	cmd.AddCommand(newNginxFmtCmd(), newNginxValidateCmd(), newNginxListCmd(), newNginxRmCmd(),
 		newNginxEnableCmd(), newNginxDisableCmd(), newNginxTestCmd(), newNginxReloadCmd(),
-		newNginxRestartCmd())
+		newNginxRestartCmd(), newNginxStatusCmd())
 	return cmd
+}
+
+// newNginxStatusCmd : affiche l'état du service nginx (systemctl/service status).
+// Lecture seule : pas de preflight ni d'auto-install.
+func newNginxStatusCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "status",
+		Short: "Afficher l'état du service nginx (systemctl/service status)",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			out, err := nginx.NewTester().Status(cmd.Context())
+			_, _ = cmd.OutOrStdout().Write(out)
+			return err
+		},
+	}
 }
 
 // newNginxRestartCmd : redémarre nginx (arrêt complet puis démarrage), après

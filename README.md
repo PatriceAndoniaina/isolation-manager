@@ -40,6 +40,7 @@ go build -o bin/isolation-manager ./src/cmd
 | `nginx test [fichier]` | Tester la config via le binaire nginx (`nginx -t`) |
 | `nginx reload` | Recharger nginx à chaud (`nginx -t` puis reload adapté à l'OS : systemctl/service/`nginx -s reload`) |
 | `nginx restart` | Redémarrer nginx (`nginx -t` puis restart adapté à l'OS) |
+| `nginx status` | Afficher l'état du service nginx (`systemctl`/`service status`) |
 | `nginx list <dossier>` | Lister les fichiers `*.conf` d'un dossier (`-c` pour valider chacun) |
 | `nginx rm <fichier>` | Supprimer un fichier `*.conf` (confirmation, `-f` pour forcer) |
 | `nginx enable <fichier>` | Activer un fichier (lien dans `sites-enabled`) |

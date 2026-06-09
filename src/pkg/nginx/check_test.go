@@ -143,6 +143,61 @@ func TestRestartFallbackStopThenStart(t *testing.T) {
 	}
 }
 
+func TestStatusViaServiceManager(t *testing.T) {
+	tests := []struct {
+		name string
+		look func(string) bool
+		want string
+	}{
+		{"linux systemd", has("systemctl"), "systemctl status nginx"},
+		{"linux sysv", has("service"), "service nginx status"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fr := &fakeRunner{out: []byte("active (running)")}
+			te := NewTester(WithRunner(fr), WithGOOS("linux"), WithLooker(tt.look))
+			out, err := te.Status(context.Background())
+			if err != nil {
+				t.Fatalf("Status: %v", err)
+			}
+			if !strings.Contains(string(out), "active") {
+				t.Errorf("out = %q", out)
+			}
+			if got := strings.Join(fr.calls[0], " "); got != tt.want {
+				t.Errorf("status cmd = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestStatusInactiveIsNotWrapped(t *testing.T) {
+	// systemctl renvoie un code non nul si nginx est inactif : l'erreur brute
+	// est transmise (pas de "... a échoué"), la sortie est conservée.
+	fr := &fakeRunner{out: []byte("inactive (dead)"), err: errors.New("exit status 3")}
+	te := NewTester(WithRunner(fr), WithGOOS("linux"), WithLooker(has("systemctl")))
+	out, err := te.Status(context.Background())
+	if err == nil {
+		t.Fatal("Status = nil err, want raw exit error")
+	}
+	if strings.Contains(err.Error(), "a échoué") {
+		t.Errorf("error should be raw, got %q", err)
+	}
+	if !strings.Contains(string(out), "inactive") {
+		t.Errorf("status output not preserved: %q", out)
+	}
+}
+
+func TestStatusNoServiceManager(t *testing.T) {
+	fr := &fakeRunner{}
+	te := NewTester(WithRunner(fr), WithGOOS("darwin"), WithLooker(has()))
+	if _, err := te.Status(context.Background()); err == nil {
+		t.Fatal("Status = nil, want error on host without service manager")
+	}
+	if len(fr.calls) != 0 {
+		t.Error("runner must not be called when no service manager")
+	}
+}
+
 func TestReloadFailure(t *testing.T) {
 	fr := &fakeRunner{out: []byte("nginx: [error] ... failed"), err: errors.New("exit 1")}
 	te := NewTester(WithRunner(fr), WithGOOS("linux"), WithLooker(has("systemctl")))
