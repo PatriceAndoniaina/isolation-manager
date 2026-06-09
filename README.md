@@ -88,6 +88,49 @@ isolation-manager start user01
 
 ---
 
+## Connexion SSH (clé ou mot de passe)
+
+La commande `ssh <name>` ouvre une session vers un conteneur. **Par défaut,
+l'authentification se fait par clé** (durcissement imposé) ; le mot de passe
+est disponible en **opt-in explicite**.
+
+### Par clé (défaut, recommandé)
+
+```bash
+isolation-manager ssh user01            # utilisateur root
+isolation-manager ssh user01 --user app # autre utilisateur
+```
+
+Au premier appel, l'outil :
+1. génère une paire **ED25519** dédiée au conteneur (clé privée en `0600`) ;
+2. installe la clé publique dans le `authorized_keys` du conteneur ;
+3. se connecte avec un durcissement strict :
+   `PasswordAuthentication=no`, `PreferredAuthentications=publickey`,
+   `IdentitiesOnly=yes`, `ForwardAgent=no`.
+
+### Par mot de passe (opt-in `--password`)
+
+```bash
+isolation-manager ssh user01 --password
+```
+
+- ssh **demande le mot de passe** de façon interactive (aucune clé requise).
+- Aucune clé n'est générée ni installée dans ce mode.
+- `ForwardAgent=no` reste imposé ; `PasswordAuthentication=no` n'est **pas**
+  ajouté, et `PreferredAuthentications=publickey,password` est utilisé.
+
+> ⚠️ **Sécurité réduite.** Le mot de passe est une exception assumée à la
+> politique « clé uniquement » du projet (voir `rules/security.md`). Un
+> avertissement est émis. Préfère la clé dès que possible ; n'utilise
+> `--password` que pour un bootstrap ou un accès temporaire.
+
+| Mode | Flag | Auth présentée | Clé requise |
+|---|---|---|---|
+| Clé (défaut) | — | `publickey` uniquement | oui (générée auto) |
+| Mot de passe | `--password` | `publickey,password` | non |
+
+---
+
 ## Workflow distant (déploiement + pilotage)
 
 Idée : on donne un **accès SSH** à un serveur Linux ; l'outil détecte son OS,
@@ -163,8 +206,9 @@ isolation-manager list
 
 - Conteneurs en `--read-only` + tmpfs durci (`noexec,nodev,nosuid`), aucun
   `--privileged`/`--capability` (garde-fou à l'exécution).
-- SSH par **clé uniquement** (ED25519), pas de mot de passe, agent forwarding
-  désactivé, clés en `0600`.
+- SSH par **clé ED25519 par défaut** (agent forwarding désactivé, clés en
+  `0600`) ; le mot de passe n'est possible que via l'opt-in explicite
+  `--password` — voir [Connexion SSH](#connexion-ssh-clé-ou-mot-de-passe).
 - nginx généré : **TLS imposé**, rate limiting, limite de taille des requêtes,
   aucun upstream vers l'hôte (config revalidée après génération).
 - Toutes les opérations système sont journalisées (audit trail).
