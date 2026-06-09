@@ -95,6 +95,54 @@ func TestReloadAdaptsToOS(t *testing.T) {
 	}
 }
 
+func TestRestartViaServiceManager(t *testing.T) {
+	tests := []struct {
+		name string
+		look func(string) bool
+		want string
+	}{
+		{"linux systemd", has("systemctl"), "systemctl restart nginx"},
+		{"linux sysv", has("service"), "service nginx restart"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fr := &fakeRunner{}
+			te := NewTester(WithRunner(fr), WithGOOS("linux"), WithLooker(tt.look))
+			if _, err := te.Restart(context.Background()); err != nil {
+				t.Fatalf("Restart: %v", err)
+			}
+			if len(fr.calls) != 1 {
+				t.Fatalf("calls = %d, want 1 (single service command)", len(fr.calls))
+			}
+			if got := strings.Join(fr.calls[0], " "); got != tt.want {
+				t.Errorf("restart cmd = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRestartFallbackStopThenStart(t *testing.T) {
+	for _, goos := range []string{"linux", "darwin"} {
+		t.Run(goos, func(t *testing.T) {
+			fr := &fakeRunner{}
+			// Aucun gestionnaire de services → repli stop+start.
+			te := NewTester(WithRunner(fr), WithGOOS(goos), WithLooker(has()))
+			if _, err := te.Restart(context.Background()); err != nil {
+				t.Fatalf("Restart: %v", err)
+			}
+			if len(fr.calls) != 2 {
+				t.Fatalf("calls = %d, want 2 (stop puis start)", len(fr.calls))
+			}
+			if got := strings.Join(fr.calls[0], " "); got != "nginx -s stop" {
+				t.Errorf("call[0] = %q, want \"nginx -s stop\"", got)
+			}
+			if got := strings.Join(fr.calls[1], " "); got != "nginx" {
+				t.Errorf("call[1] = %q, want \"nginx\"", got)
+			}
+		})
+	}
+}
+
 func TestReloadFailure(t *testing.T) {
 	fr := &fakeRunner{out: []byte("nginx: [error] ... failed"), err: errors.New("exit 1")}
 	te := NewTester(WithRunner(fr), WithGOOS("linux"), WithLooker(has("systemctl")))

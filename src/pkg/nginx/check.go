@@ -80,33 +80,50 @@ func (t *Tester) Check(ctx context.Context, file string) ([]byte, error) {
 	return out, nil
 }
 
-// reloadArgs choisit la commande de rechargement selon l'OS et le gestionnaire
-// de services disponible : systemd (`systemctl reload nginx`) ou SysV
-// (`service nginx reload`) sous Linux, sinon le signal natif `nginx -s reload`
-// (autres OS, ou Linux sans gestionnaire de services détecté).
-func (t *Tester) reloadArgs() []string {
-	if t.goos == "linux" {
-		switch {
-		case t.look("systemctl"):
-			return []string{"systemctl", "reload", "nginx"}
-		case t.look("service"):
-			return []string{"service", "nginx", "reload"}
-		}
-	}
-	return []string{"nginx", "-s", "reload"}
-}
-
-// Reload recharge la configuration nginx à chaud, sans interruption de service,
-// via la commande adaptée à l'OS hôte (voir reloadArgs). À n'exécuter qu'après
-// un Check réussi pour ne pas propager une configuration invalide.
-func (t *Tester) Reload(ctx context.Context) ([]byte, error) {
+// run exécute argv sous un timeout et enveloppe l'erreur avec la commande.
+func (t *Tester) run(ctx context.Context, argv []string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, config.DefaultExecTimeout)
 	defer cancel()
-
-	argv := t.reloadArgs()
 	out, err := t.runner.Run(ctx, argv)
 	if err != nil {
 		return out, fmt.Errorf("%s a échoué: %w", strings.Join(argv, " "), err)
 	}
 	return out, nil
+}
+
+// serviceCmd renvoie la commande du gestionnaire de services pour action
+// ("reload"/"restart") sous Linux : systemd (`systemctl <action> nginx`) puis
+// SysV (`service nginx <action>`). Renvoie nil si aucun n'est détecté (autres
+// OS, ou Linux sans gestionnaire) — l'appelant retombe sur les signaux nginx.
+func (t *Tester) serviceCmd(action string) []string {
+	if t.goos == "linux" {
+		switch {
+		case t.look("systemctl"):
+			return []string{"systemctl", action, "nginx"}
+		case t.look("service"):
+			return []string{"service", "nginx", action}
+		}
+	}
+	return nil
+}
+
+// Reload recharge la configuration nginx à chaud, sans interruption de service,
+// via la commande adaptée à l'OS hôte. À n'exécuter qu'après un Check réussi
+// pour ne pas propager une configuration invalide.
+func (t *Tester) Reload(ctx context.Context) ([]byte, error) {
+	if argv := t.serviceCmd("reload"); argv != nil {
+		return t.run(ctx, argv)
+	}
+	return t.run(ctx, []string{"nginx", "-s", "reload"})
+}
+
+// Restart redémarre nginx (arrêt complet puis démarrage), via le gestionnaire
+// de services s'il est disponible ; sinon `nginx -s stop` (best-effort, ignoré
+// si nginx n'est pas lancé) suivi de `nginx`.
+func (t *Tester) Restart(ctx context.Context) ([]byte, error) {
+	if argv := t.serviceCmd("restart"); argv != nil {
+		return t.run(ctx, argv)
+	}
+	_, _ = t.run(ctx, []string{"nginx", "-s", "stop"})
+	return t.run(ctx, []string{"nginx"})
 }
